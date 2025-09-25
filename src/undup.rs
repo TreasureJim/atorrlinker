@@ -1,3 +1,4 @@
+use log::error;
 use sha2::Digest as _;
 use std::{
     fs::File,
@@ -29,7 +30,7 @@ type Hash = String;
 enum FileType {
     File(PathBuf),
     Symlink(PathBuf),
-    Directory,
+    // Directory,
 }
 
 #[derive(Default)]
@@ -69,18 +70,18 @@ fn hash_file(path: &Path) -> io::Result<String> {
 /// Traverse through any subdirectories and find any files that exist then hash them.
 /// Records any symlinks found
 fn find_and_hash_files(
+    disc_files: &mut DiscoveredFiles,
     dir: &Path,
     // skip_cb: &dyn Fn(&Path) -> bool,
-) -> std::io::Result<DiscoveredFiles> {
+) -> std::io::Result<()> {
     let mut queue = std::collections::VecDeque::<PathBuf>::from(vec![dir.to_path_buf()]);
-    let mut disc_files = DiscoveredFiles::default();
 
     if !dir.metadata()?.is_dir() {
         disc_files.add_hash(
             hash_file(&dir.to_path_buf())?,
             FileType::File(dir.to_path_buf()),
         );
-        return Ok(disc_files);
+        return Ok(());
     }
 
     while let Some(dir) = queue.pop_back() {
@@ -100,7 +101,9 @@ fn find_and_hash_files(
                 }
                 ft if ft.is_symlink() => disc_files.add_hash(
                     hash_file(&entry.path())?,
-                    FileType::Symlink(std::fs::read_link(&entry.path()).expect("Should be a symlink")),
+                    FileType::Symlink(
+                        std::fs::read_link(&entry.path()).expect("Should be a symlink"),
+                    ),
                 ),
                 _ => {
                     log::error!("Entry is not directory, file or symlink");
@@ -109,14 +112,28 @@ fn find_and_hash_files(
         }
     }
 
-    Ok(disc_files)
+    Ok(())
 }
 
-// fn find_matching_files(
-//     source_dir: &Path,
-//     target_dir: &Path,
-// ) -> std::sync::mpsc::Receiver<MatchingFile> {
-// }
+/// Hash files in source and target directories and find matches between them.
+fn find_matching_files(
+    source_dir: &[&Path],
+    target_dir: &[&Path],
+) -> std::sync::mpsc::Receiver<MatchingFile> {
+    let mut source_hashes = DiscoveredFiles::default();
+    let mut target_hashes = DiscoveredFiles::default();
+
+    for dir in source_dir {
+        let _ = find_and_hash_files(&mut source_hashes, dir)
+            .inspect_err(|e| log::error!("IO error in {dir:?}: {e}"));
+    }
+    for dir in target_dir {
+        let _ = find_and_hash_files(&mut source_hashes, dir)
+            .inspect_err(|e| log::error!("IO error in {dir:?}: {e}"));
+    }
+
+    todo!()
+}
 
 #[cfg(test)]
 mod tests {
@@ -128,8 +145,9 @@ mod tests {
     #[test]
     fn test_empty_directory() {
         let temp_dir = tempdir().unwrap();
-        let result = find_and_hash_files(temp_dir.path()).unwrap();
-        
+        let mut result = DiscoveredFiles::default();
+        find_and_hash_files(&mut result, temp_dir.path()).unwrap();
+
         assert!(result.files.is_empty());
     }
 
@@ -137,21 +155,22 @@ mod tests {
     fn test_single_file() {
         let temp_dir = tempdir().unwrap();
         let file_path = temp_dir.path().join("test.txt");
-        
+
         let mut file = File::create(&file_path).unwrap();
         file.write_all(b"Hello, World!").unwrap();
-        
-        let result = find_and_hash_files(temp_dir.path()).unwrap();
-        
+
+        let mut result = DiscoveredFiles::default();
+        find_and_hash_files(&mut result, temp_dir.path()).unwrap();
+
         assert_eq!(result.files.len(), 1);
-        
+
         let (hash, file_types) = result.files.iter().next().unwrap();
         assert_eq!(file_types.len(), 1);
-        
+
         // Verify the hash is correct for "Hello, World!"
         let expected_hash = "DFFD6021BB2BD5B0AF676290809EC3A53191DD81C7F70A4B28688A362182986F";
         assert_eq!(hash, expected_hash);
-        
+
         if let FileType::File(path) = &file_types[0] {
             assert_eq!(path, &file_path);
         } else {
@@ -162,25 +181,26 @@ mod tests {
     #[test]
     fn test_nested_directories() {
         let temp_dir = tempdir().unwrap();
-        
+
         // Create nested directory structure
         let sub_dir = temp_dir.path().join("subdir");
         fs::create_dir(&sub_dir).unwrap();
-        
+
         let file1 = temp_dir.path().join("file1.txt");
         let file2 = sub_dir.join("file2.txt");
-        
+
         let mut f1 = File::create(&file1).unwrap();
         f1.write_all(b"File 1 content").unwrap();
-        
+
         let mut f2 = File::create(&file2).unwrap();
         f2.write_all(b"File 2 content").unwrap();
-        
-        let result = find_and_hash_files(temp_dir.path()).unwrap();
-        
+
+        let mut result = DiscoveredFiles::default();
+        find_and_hash_files(&mut result, temp_dir.path()).unwrap();
+
         // Should have 2 entries in the map (different hashes for different content)
         assert_eq!(result.files.len(), 2);
-        
+
         // Each hash should have exactly one file
         for (_, file_types) in result.files.iter() {
             assert_eq!(file_types.len(), 1);
@@ -190,28 +210,30 @@ mod tests {
     #[test]
     fn test_duplicate_files_same_hash() {
         let temp_dir = tempdir().unwrap();
-        
+
         let file1 = temp_dir.path().join("file1.txt");
         let file2 = temp_dir.path().join("file2.txt");
-        
+
         let content = b"Identical content";
-        
+
         let mut f1 = File::create(&file1).unwrap();
         f1.write_all(content).unwrap();
-        
+
         let mut f2 = File::create(&file2).unwrap();
         f2.write_all(content).unwrap();
-        
-        let result = find_and_hash_files(temp_dir.path()).unwrap();
-        
+
+        let mut result = DiscoveredFiles::default();
+        find_and_hash_files(&mut result, temp_dir.path()).unwrap();
+
         // Should have only one hash entry (both files have same content)
         assert_eq!(result.files.len(), 1);
-        
+
         let (_, file_types) = result.files.iter().next().unwrap();
         // But that hash should have two files associated with it
         assert_eq!(file_types.len(), 2);
-        
-        let paths: Vec<&PathBuf> = file_types.iter()
+
+        let paths: Vec<&PathBuf> = file_types
+            .iter()
             .filter_map(|ft| {
                 if let FileType::File(path) = ft {
                     Some(path)
@@ -220,7 +242,7 @@ mod tests {
                 }
             })
             .collect();
-        
+
         assert_eq!(paths.len(), 2);
         assert!(paths.contains(&&file1));
         assert!(paths.contains(&&file2));
@@ -229,21 +251,22 @@ mod tests {
     #[test]
     fn test_symlink_hashing() {
         let temp_dir = tempdir().unwrap();
-        
+
         // Create a target file
         let target_file = temp_dir.path().join("target.txt");
         let mut file = File::create(&target_file).unwrap();
         file.write_all(b"Target content").unwrap();
-        
+
         // Create a symlink
         let symlink_path = temp_dir.path().join("link.txt");
         #[cfg(unix)]
         std::os::unix::fs::symlink(&target_file, &symlink_path).unwrap();
         #[cfg(windows)]
         std::os::windows::fs::symlink_file(&target_file, &symlink_path).unwrap();
-        
-        let result = find_and_hash_files(temp_dir.path()).unwrap();
-        
+
+        let mut result = DiscoveredFiles::default();
+        find_and_hash_files(&mut result, temp_dir.path()).unwrap();
+
         // Retrieve the first hash result
         let files_entry = result.files.iter().next().unwrap();
 
@@ -252,9 +275,14 @@ mod tests {
         // Should have 2 entries: one for the file, one for the symlink
         // Note: The symlink will be hashed (its content is the path it points to)
         assert_eq!(files_entry.1.len(), 2);
-        
+
         // Find the symlink entry
-        let symlink = files_entry.1.iter().filter(|f| matches!(f, FileType::Symlink(_))).next().expect("There should be at least 1 symlink");
+        let symlink = files_entry
+            .1
+            .iter()
+            .filter(|f| matches!(f, FileType::Symlink(_)))
+            .next()
+            .expect("There should be at least 1 symlink");
 
         // The symlink should link back to the original file
         if let FileType::Symlink(path) = symlink {
@@ -268,18 +296,19 @@ mod tests {
     fn test_file_as_input() {
         let temp_dir = tempdir().unwrap();
         let file_path = temp_dir.path().join("single_file.txt");
-        
+
         let mut file = File::create(&file_path).unwrap();
         file.write_all(b"Single file content").unwrap();
-        
+
         // Call find_and_hash_files directly on the file path
-        let result = find_and_hash_files(&file_path).unwrap();
-        
+        let mut result = DiscoveredFiles::default();
+        find_and_hash_files(&mut result, &file_path).unwrap();
+
         assert_eq!(result.files.len(), 1);
-        
+
         let (hash, file_types) = result.files.iter().next().unwrap();
         assert_eq!(file_types.len(), 1);
-        
+
         if let FileType::File(path) = &file_types[0] {
             assert_eq!(path, &file_path);
         } else {
@@ -290,47 +319,52 @@ mod tests {
     #[test]
     fn test_mixed_content_with_duplicates() {
         let temp_dir = tempdir().unwrap();
-        
+
         // Create files with same content
         let file1 = temp_dir.path().join("file1.txt");
         let file2 = temp_dir.path().join("file2.txt");
-        
+
         let common_content = b"Common content";
         let mut f1 = File::create(&file1).unwrap();
         f1.write_all(common_content).unwrap();
         let mut f2 = File::create(&file2).unwrap();
         f2.write_all(common_content).unwrap();
-        
+
         // Create file with different content
         let file3 = temp_dir.path().join("file3.txt");
         let mut f3 = File::create(&file3).unwrap();
         f3.write_all(b"Different content").unwrap();
-        
+
         // Create subdirectory with another file
         let sub_dir = temp_dir.path().join("subdir");
         fs::create_dir(&sub_dir).unwrap();
         let file4 = sub_dir.join("file4.txt");
         let mut f4 = File::create(&file4).unwrap();
         f4.write_all(common_content).unwrap(); // Same content again
-        
-        let result = find_and_hash_files(temp_dir.path()).unwrap();
-        
+
+        let mut result = DiscoveredFiles::default();
+        find_and_hash_files(&mut result, temp_dir.path()).unwrap();
+
         // Should have 2 unique hashes: one for the common content, one for different content
         assert_eq!(result.files.len(), 2);
-        
+
         // Find the common content hash (should have 3 files)
-        let common_hash_entry = result.files.iter()
+        let common_hash_entry = result
+            .files
+            .iter()
             .find(|(_, file_types)| file_types.len() == 3)
             .expect("Should find hash with 3 files");
-        
+
         let (_, common_files) = common_hash_entry;
         assert_eq!(common_files.len(), 3);
-        
+
         // Find the unique content hash (should have 1 file)
-        let unique_hash_entry = result.files.iter()
+        let unique_hash_entry = result
+            .files
+            .iter()
             .find(|(_, file_types)| file_types.len() == 1)
             .expect("Should find hash with 1 file");
-        
+
         let (_, unique_files) = unique_hash_entry;
         assert_eq!(unique_files.len(), 1);
     }
@@ -339,18 +373,19 @@ mod tests {
     fn test_empty_file() {
         let temp_dir = tempdir().unwrap();
         let file_path = temp_dir.path().join("empty.txt");
-        
+
         File::create(&file_path).unwrap();
-        
-        let result = find_and_hash_files(temp_dir.path()).unwrap();
-        
+
+        let mut result = DiscoveredFiles::default();
+        find_and_hash_files(&mut result, temp_dir.path()).unwrap();
+
         assert_eq!(result.files.len(), 1);
-        
+
         let (hash, file_types) = result.files.iter().next().unwrap();
         // SHA-256 hash of empty string
         let expected_hash = "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855";
         assert_eq!(hash, expected_hash);
-        
+
         assert_eq!(file_types.len(), 1);
         if let FileType::File(path) = &file_types[0] {
             assert_eq!(path, &file_path);
@@ -362,24 +397,25 @@ mod tests {
     #[test]
     fn test_directory_entries_ignored_in_map() {
         let temp_dir = tempdir().unwrap();
-        
+
         // Create a directory (should not appear in the files map)
         let sub_dir = temp_dir.path().join("subdir");
         fs::create_dir(&sub_dir).unwrap();
-        
+
         // Create a file in the directory
         let file_path = sub_dir.join("file.txt");
         let mut file = File::create(&file_path).unwrap();
         file.write_all(b"File content").unwrap();
-        
-        let result = find_and_hash_files(temp_dir.path()).unwrap();
-        
+
+        let mut result = DiscoveredFiles::default();
+        find_and_hash_files(&mut result, temp_dir.path()).unwrap();
+
         // Should only have the file, not the directory
         assert_eq!(result.files.len(), 1);
-        
+
         let (_, file_types) = result.files.iter().next().unwrap();
         assert_eq!(file_types.len(), 1);
-        
+
         // Verify it's a file, not a directory
         if let FileType::File(path) = &file_types[0] {
             assert_eq!(path, &file_path);
