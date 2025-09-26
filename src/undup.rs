@@ -29,8 +29,16 @@ type Hash = String;
 
 enum FileType {
     File(PathBuf),
-    Symlink(PathBuf),
-    // Directory,
+    Symlink { source: PathBuf, target: PathBuf }, // Directory,
+}
+
+impl FileType {
+    fn src_path(&self) -> &Path {
+        match self {
+            Self::File(path) => path,
+            Self::Symlink { source, target } => source,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -116,23 +124,56 @@ fn find_and_hash_files(
 }
 
 /// Hash files in source and target directories and find matches between them.
+/// Target directory will contain files that will be deleted and symlinked to the target dirs
 fn find_matching_files(
     source_dir: &[&Path],
     target_dir: &[&Path],
-) -> std::sync::mpsc::Receiver<MatchingFile> {
+) -> io::Result<Vec<MatchingFile>> {
     let mut source_hashes = DiscoveredFiles::default();
     let mut target_hashes = DiscoveredFiles::default();
 
     for dir in source_dir {
         let _ = find_and_hash_files(&mut source_hashes, dir)
-            .inspect_err(|e| log::error!("IO error in {dir:?}: {e}"));
+            .inspect_err(|e| log::error!("IO error in {dir:?}: {e}"))?;
     }
     for dir in target_dir {
         let _ = find_and_hash_files(&mut source_hashes, dir)
-            .inspect_err(|e| log::error!("IO error in {dir:?}: {e}"));
+            .inspect_err(|e| log::error!("IO error in {dir:?}: {e}"))?;
     }
 
-    todo!()
+    let matches = Vec::new();
+    for target in target_hashes.files.into_iter() {
+        // Find first symlink and use as source if exists
+        let source_path = if let Some(FileType::Symlink { source, target }) =
+            target.1.iter().find(|p| matches!(p, FileType::Symlink(_)))
+        {
+            // If symlink is the only one then skip the hash
+            if target.1.len() == 1 {
+                continue;
+            }
+            target
+        }
+        // Find source in source directories
+        else if let Some(source) = source_hashes.files.get(&target.0) {
+            &source[0].src_path()
+        }
+        // Couldn't find matching source
+        else {
+            log::info!("Couldn't find file to symlink to for the following files: {target.1}");
+            continue;
+        };
+
+        // Check for non-linked file
+        for f in target
+            .1
+            .into_iter()
+            .filter(|f| matches!(f, FileType::File(_)))
+        {
+            matches.push(MatchingFile { src_path: source_path, dest_path: f.src_path() });
+        }
+    }
+
+    Ok(matches)
 }
 
 #[cfg(test)]
