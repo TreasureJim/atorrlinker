@@ -6,8 +6,10 @@ use std::{
 };
 
 pub struct MatchingFile {
-    src_path: PathBuf,
-    dest_path: PathBuf,
+    /// The path of the actual file
+    pub src_path: PathBuf,
+    /// The path of the file to be replaced with a symlink
+    pub dest_path: PathBuf,
 }
 
 /**
@@ -36,7 +38,7 @@ impl FileType {
     fn src_path(&self) -> &Path {
         match self {
             Self::File(path) => path,
-            Self::Symlink { source, target } => source,
+            Self::Symlink { source, target: _ } => source,
         }
     }
 }
@@ -50,13 +52,10 @@ impl DiscoveredFiles {
     fn add_hash(&mut self, hash: Hash, path: FileType) {
         self.files.entry(hash).or_default().push(path);
     }
-
-    fn is_empty(&self) -> bool {
-        self.files.is_empty()
-    }
 }
 
 fn hash_file(path: &Path) -> io::Result<String> {
+    log::info!("Hashing: {path:?}");
     let input = File::open(path)?;
     let mut reader = BufReader::new(input);
 
@@ -84,7 +83,7 @@ fn find_and_hash_files(
 ) -> std::io::Result<()> {
     let mut queue = std::collections::VecDeque::<PathBuf>::from(vec![dir.to_path_buf()]);
 
-    if !dir.metadata()?.is_dir() {
+    if !dir.symlink_metadata()?.is_dir() {
         disc_files.add_hash(
             hash_file(&dir.to_path_buf())?,
             FileType::File(dir.to_path_buf()),
@@ -127,17 +126,19 @@ fn find_and_hash_files(
 /// Hash files in source and target directories and find matches between them.
 /// Target directory will contain files that will be deleted and symlinked to the target dirs
 pub fn find_matching_files(
-    source_dir: &[&Path],
-    target_dir: &[&Path],
+    source_dir: &[impl AsRef<Path>],
+    target_dir: &[impl AsRef<Path>],
 ) -> io::Result<Vec<MatchingFile>> {
     let mut source_hashes = DiscoveredFiles::default();
     let mut target_hashes = DiscoveredFiles::default();
 
     for dir in source_dir {
+        let dir = dir.as_ref();
         let _ = find_and_hash_files(&mut source_hashes, dir)
             .inspect_err(|e| log::error!("IO error in {dir:?}: {e}"))?;
     }
     for dir in target_dir {
+        let dir = dir.as_ref();
         let _ = find_and_hash_files(&mut target_hashes, dir)
             .inspect_err(|e| log::error!("IO error in {dir:?}: {e}"))?;
     }
