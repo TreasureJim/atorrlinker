@@ -5,7 +5,7 @@ use std::os;
 
 pub fn dry_run(matching: &[MatchingFile]) {
     for matching_files in matching {
-        log::info!(
+        println!(
             "Symlinking {0:?} with {1:?}",
             &matching_files.dest_path,
             &matching_files.src_path
@@ -22,7 +22,7 @@ pub fn symlink_matching_files(matching: &[MatchingFile]) -> io::Result<()> {
         #[cfg(windows)]
         os::windows::fs::symlink_file(&matching_files.src_path, tmp_path)?;
 
-        log::info!(
+        println!(
             "Symlinking {0:?} with {1:?}",
             &matching_files.dest_path,
             &matching_files.src_path
