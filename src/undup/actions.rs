@@ -1,4 +1,4 @@
-use crate::hashing::MatchingFile;
+use crate::matching::MatchingFile;
 use std::fs;
 use std::io;
 use std::os;
@@ -40,7 +40,7 @@ mod tests {
     use std::fs;
     use tempfile;
 
-    use crate::{actions::symlink_matching_files, hashing::MatchingFile};
+    use super::*;
 
     #[test]
     fn replace_file() {

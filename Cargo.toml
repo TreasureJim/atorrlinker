@@ -7,10 +7,17 @@ edition = "2024"
 name = "atorrlinker-undup"
 path = "src/undup/cli.rs"
 
+[[bin]]
+name = "atorrlinker"
+path = "src/service/service.rs"
+
 [dependencies]
+anyhow = "1.0.100"
 clap = { version = "4.5.48", features = ["derive"] }
+directories = "6.0.0"
 env_logger = "0.11.8"
 log = "0.4.28"
+rusqlite = "0.37.0"
 sha2 = "0.10.9"
 thiserror = "2.0.16"
 
