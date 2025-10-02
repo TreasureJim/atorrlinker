@@ -1,4 +1,5 @@
 pub mod no_cache;
+pub mod file_cache;
 
 use sha2::Digest as _;
 use std::{
