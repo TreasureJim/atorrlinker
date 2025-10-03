@@ -1,8 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::hashing::HashingBackend;
-
-pub(crate) type Hash = String;
+use crate::hashing::HashCache;
 
 #[derive(Debug)]
 pub(super) enum FileType {
@@ -35,7 +33,7 @@ impl DiscoveredFiles {
 pub(crate) fn find_and_hash_files(
     disc_files: &mut DiscoveredFiles,
     dir: &Path,
-    hasher: &impl HashingBackend
+    hasher: &impl HashCache
 ) -> std::io::Result<()> {
     let mut queue = std::collections::VecDeque::<PathBuf>::from(vec![dir.to_path_buf()]);
 

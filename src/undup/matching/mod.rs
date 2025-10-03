@@ -7,7 +7,7 @@ use std::{
 
 use find::{DiscoveredFiles, FileType, find_and_hash_files};
 
-use crate::hashing::HashingBackend;
+use crate::hashing::HashCache;
 
 pub struct MatchingFile {
     /// The path of the actual file
@@ -21,7 +21,7 @@ pub struct MatchingFile {
 pub fn find_matching_files(
     source_dir: &[impl AsRef<Path>],
     target_dir: &[impl AsRef<Path>],
-    hasher: &impl HashingBackend,
+    hasher: &impl HashCache,
 ) -> io::Result<Vec<MatchingFile>> {
     let mut source_hashes = DiscoveredFiles::default();
     let mut target_hashes = DiscoveredFiles::default();
