@@ -7,7 +7,7 @@ use std::{
 
 use find::{DiscoveredFiles, FileType, find_and_hash_files};
 
-use crate::hashing::HashingBackend;
+use crate::hashing::HashCache;
 
 pub struct MatchingFile {
     /// The path of the actual file
@@ -21,7 +21,7 @@ pub struct MatchingFile {
 pub fn find_matching_files(
     source_dir: &[impl AsRef<Path>],
     target_dir: &[impl AsRef<Path>],
-    hasher: &impl HashingBackend,
+    hasher: &mut dyn HashCache,
 ) -> io::Result<Vec<MatchingFile>> {
     let mut source_hashes = DiscoveredFiles::default();
     let mut target_hashes = DiscoveredFiles::default();
@@ -130,8 +130,8 @@ mod tests {
         create_test_file(&source_dir.join("file2.txt"), "content2").unwrap();
         create_test_file(&target_dir.join("file2.txt"), "content2").unwrap();
 
-        let hasher = HashingNoCache {};
-        let matches = find_matching_files(&[&source_dir], &[&target_dir], &hasher).unwrap();
+        let mut hasher = HashingNoCache {};
+        let matches = find_matching_files(&[&source_dir], &[&target_dir], &mut hasher).unwrap();
 
         assert_eq!(matches.len(), 2);
         assert!(
@@ -159,8 +159,8 @@ mod tests {
         create_test_file(&source_dir.join("file1.txt"), "content1").unwrap();
         create_test_file(&target_dir.join("file1.txt"), "different_content").unwrap();
 
-        let hasher = HashingNoCache {};
-        let matches = find_matching_files(&[&source_dir], &[&target_dir], &hasher).unwrap();
+        let mut hasher = HashingNoCache {};
+        let matches = find_matching_files(&[&source_dir], &[&target_dir], &mut hasher).unwrap();
 
         // Files with different content should not match
         assert_eq!(matches.len(), 0);
@@ -184,9 +184,9 @@ mod tests {
         create_test_file(&target_dir1.join("file1.txt"), "content1").unwrap();
         create_test_file(&target_dir2.join("file2.txt"), "content2").unwrap();
 
-        let hasher = HashingNoCache {};
+        let mut hasher = HashingNoCache {};
         let matches =
-            find_matching_files(&[&source_dir1, &source_dir2], &[&target_dir1, &target_dir2], &hasher)
+            find_matching_files(&[&source_dir1, &source_dir2], &[&target_dir1, &target_dir2], &mut hasher)
                 .unwrap();
 
         assert_eq!(matches.len(), 2);
@@ -208,8 +208,8 @@ mod tests {
         // Create symlink in target directory
         create_symlink(&source_dir.join("file1.txt"), &target_dir.join("file1.txt")).unwrap();
 
-        let hasher = HashingNoCache {};
-        let matches = find_matching_files(&[&source_dir], &[&target_dir], &hasher).unwrap();
+        let mut hasher = HashingNoCache {};
+        let matches = find_matching_files(&[&source_dir], &[&target_dir], &mut hasher).unwrap();
 
         // Should skip the symlink-only case
         assert_eq!(matches.len(), 0);
@@ -220,8 +220,8 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let nonexistent_dir = temp_dir.path().join("nonexistent");
 
-        let hasher = HashingNoCache {};
-        let result = find_matching_files(&[&nonexistent_dir], &[&nonexistent_dir], &hasher);
+        let mut hasher = HashingNoCache {};
+        let result = find_matching_files(&[&nonexistent_dir], &[&nonexistent_dir], &mut hasher);
 
         assert!(result.is_err());
     }
@@ -235,8 +235,8 @@ mod tests {
         fs::create_dir_all(&empty_dir1).unwrap();
         fs::create_dir_all(&empty_dir2).unwrap();
 
-        let hasher = HashingNoCache {};
-        let matches = find_matching_files(&[&empty_dir1], &[&empty_dir2], &hasher).unwrap();
+        let mut hasher = HashingNoCache {};
+        let matches = find_matching_files(&[&empty_dir1], &[&empty_dir2], &mut hasher).unwrap();
 
         assert_eq!(matches.len(), 0);
     }
@@ -253,8 +253,8 @@ mod tests {
         create_test_file(&source_dir.join("subdir/file1.txt"), "content1").unwrap();
         create_test_file(&target_dir.join("subdir/file1.txt"), "content1").unwrap();
 
-        let hasher = HashingNoCache {};
-        let matches = find_matching_files(&[&source_dir], &[&target_dir], &hasher).unwrap();
+        let mut hasher = HashingNoCache {};
+        let matches = find_matching_files(&[&source_dir], &[&target_dir], &mut hasher).unwrap();
 
         assert_eq!(matches.len(), 1);
         assert!(matches[0].src_path.ends_with("subdir/file1.txt"));
@@ -279,8 +279,8 @@ mod tests {
         create_test_file(&target_dir.join("match2.txt"), "content2").unwrap();
         create_test_file(&target_dir.join("nomatch.txt"), "target_content").unwrap();
 
-        let hasher = HashingNoCache {};
-        let matches = find_matching_files(&[&source_dir], &[&target_dir], &hasher).unwrap();
+        let mut hasher = HashingNoCache {};
+        let matches = find_matching_files(&[&source_dir], &[&target_dir], &mut hasher).unwrap();
 
         assert_eq!(matches.len(), 2);
         assert!(matches.iter().all(
@@ -302,8 +302,8 @@ mod tests {
         create_test_file(&source_dir.join("file2.txt"), "same_content").unwrap();
         create_test_file(&target_dir.join("target_file.txt"), "same_content").unwrap();
 
-        let hasher = HashingNoCache {};
-        let matches = find_matching_files(&[&source_dir], &[&target_dir], &hasher).unwrap();
+        let mut hasher = HashingNoCache {};
+        let matches = find_matching_files(&[&source_dir], &[&target_dir], &mut hasher).unwrap();
 
         // Should match based on hash, regardless of filename
         assert_eq!(matches.len(), 1);

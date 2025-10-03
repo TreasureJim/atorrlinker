@@ -1,8 +1,7 @@
 use std::path::{Path, PathBuf};
+use crate::hashing::Hash;
 
-use crate::hashing::HashingBackend;
-
-pub(crate) type Hash = String;
+use crate::hashing::HashCache;
 
 #[derive(Debug)]
 pub(super) enum FileType {
@@ -35,7 +34,7 @@ impl DiscoveredFiles {
 pub(crate) fn find_and_hash_files(
     disc_files: &mut DiscoveredFiles,
     dir: &Path,
-    hasher: &impl HashingBackend
+    hasher: &mut dyn HashCache
 ) -> std::io::Result<()> {
     let mut queue = std::collections::VecDeque::<PathBuf>::from(vec![dir.to_path_buf()]);
 
@@ -96,8 +95,8 @@ mod tests {
         fn test_empty_directory() {
             let temp_dir = tempdir().unwrap();
             let mut result = DiscoveredFiles::default();
-            let hasher = HashingNoCache::new();
-            find_and_hash_files(&mut result, temp_dir.path(), &hasher).unwrap();
+            let mut hasher = HashingNoCache::new();
+            find_and_hash_files(&mut result, temp_dir.path(), &mut hasher).unwrap();
 
             assert!(result.files.is_empty());
         }
@@ -110,9 +109,9 @@ mod tests {
             let mut file = File::create(&file_path).unwrap();
             file.write_all(b"Hello, World!").unwrap();
 
-            let hasher = HashingNoCache::new();
+            let mut hasher = HashingNoCache::new();
             let mut result = DiscoveredFiles::default();
-            find_and_hash_files(&mut result, temp_dir.path(), &hasher).unwrap();
+            find_and_hash_files(&mut result, temp_dir.path(), &mut hasher).unwrap();
 
             assert_eq!(result.files.len(), 1);
 
@@ -147,9 +146,9 @@ mod tests {
             let mut f2 = File::create(&file2).unwrap();
             f2.write_all(b"File 2 content").unwrap();
 
-            let hasher = HashingNoCache::new();
+            let mut hasher = HashingNoCache::new();
             let mut result = DiscoveredFiles::default();
-            find_and_hash_files(&mut result, temp_dir.path(), &hasher).unwrap();
+            find_and_hash_files(&mut result, temp_dir.path(), &mut hasher).unwrap();
 
             // Should have 2 entries in the map (different hashes for different content)
             assert_eq!(result.files.len(), 2);
@@ -175,9 +174,9 @@ mod tests {
             let mut f2 = File::create(&file2).unwrap();
             f2.write_all(content).unwrap();
 
-            let hasher = HashingNoCache::new();
+            let mut hasher = HashingNoCache::new();
             let mut result = DiscoveredFiles::default();
-            find_and_hash_files(&mut result, temp_dir.path(), &hasher).unwrap();
+            find_and_hash_files(&mut result, temp_dir.path(), &mut hasher).unwrap();
 
             // Should have only one hash entry (both files have same content)
             assert_eq!(result.files.len(), 1);
@@ -218,9 +217,9 @@ mod tests {
             #[cfg(windows)]
             std::os::windows::fs::symlink_file(&target_file, &symlink_path).unwrap();
 
-            let hasher = HashingNoCache::new();
+            let mut hasher = HashingNoCache::new();
             let mut result = DiscoveredFiles::default();
-            find_and_hash_files(&mut result, temp_dir.path(), &hasher).unwrap();
+            find_and_hash_files(&mut result, temp_dir.path(), &mut hasher).unwrap();
 
             // Retrieve the first hash result
             let files_entry = result.files.iter().next().unwrap();
@@ -240,7 +239,7 @@ mod tests {
                 .expect("There should be at least 1 symlink");
 
             // The symlink should link back to the original file
-            if let FileType::Symlink { source, target } = symlink {
+            if let FileType::Symlink { source: _, target } = symlink {
                 assert_eq!(target, &target_file);
             } else {
                 panic!("Is not a symlink somehow!");
@@ -256,13 +255,13 @@ mod tests {
             file.write_all(b"Single file content").unwrap();
 
             // Call find_and_hash_files directly on the file path
-            let hasher = HashingNoCache::new();
+            let mut hasher = HashingNoCache::new();
             let mut result = DiscoveredFiles::default();
-            find_and_hash_files(&mut result, &file_path, &hasher).unwrap();
+            find_and_hash_files(&mut result, &file_path, &mut hasher).unwrap();
 
             assert_eq!(result.files.len(), 1);
 
-            let (hash, file_types) = result.files.iter().next().unwrap();
+            let (_hash, file_types) = result.files.iter().next().unwrap();
             assert_eq!(file_types.len(), 1);
 
             if let FileType::File(path) = &file_types[0] {
@@ -298,9 +297,9 @@ mod tests {
             let mut f4 = File::create(&file4).unwrap();
             f4.write_all(common_content).unwrap(); // Same content again
 
-            let hasher = HashingNoCache::new();
+            let mut hasher = HashingNoCache::new();
             let mut result = DiscoveredFiles::default();
-            find_and_hash_files(&mut result, temp_dir.path(), &hasher).unwrap();
+            find_and_hash_files(&mut result, temp_dir.path(), &mut hasher).unwrap();
 
             // Should have 2 unique hashes: one for the common content, one for different content
             assert_eq!(result.files.len(), 2);
@@ -333,9 +332,9 @@ mod tests {
 
             File::create(&file_path).unwrap();
 
-            let hasher = HashingNoCache::new();
+            let mut hasher = HashingNoCache::new();
             let mut result = DiscoveredFiles::default();
-            find_and_hash_files(&mut result, temp_dir.path(), &hasher).unwrap();
+            find_and_hash_files(&mut result, temp_dir.path(), &mut hasher).unwrap();
 
             assert_eq!(result.files.len(), 1);
 
@@ -365,9 +364,9 @@ mod tests {
             let mut file = File::create(&file_path).unwrap();
             file.write_all(b"File content").unwrap();
 
-            let hasher = HashingNoCache::new();
+            let mut hasher = HashingNoCache::new();
             let mut result = DiscoveredFiles::default();
-            find_and_hash_files(&mut result, temp_dir.path(), &hasher).unwrap();
+            find_and_hash_files(&mut result, temp_dir.path(), &mut hasher).unwrap();
 
             // Should only have the file, not the directory
             assert_eq!(result.files.len(), 1);
