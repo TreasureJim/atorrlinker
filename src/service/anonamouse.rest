@@ -1,0 +1,43 @@
+GET https://www.myanonamouse.net/t/1186423 HTTP/2
+Host: www.myanonamouse.net
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0
+Cookie: mam_id=JLRVxt7okP92MQEo2RWmvQlVt2sfjGv_uVwPmeG60PFYqobab3Y7Qw_1Vtpev020uNgAUTetfQl2hbVlcsARptSOpi5l2DzEEeNH_bkRJ5j3iUrja14IS6NwXFAVrz3SGfO5scgopjbHZeSZWAGfMdIi8wX0GA5Rq2YhDOPro9zrzeLAjEXVEoPNFo1DpzMug-tDVzySqso4A6INHFX2Fdzg8bZ0LFg2zg2uAgd1NquvFtg-ldxhGYiqpavwLkfePXTaGLuL4MIV1t2iQYigndlBqdHH3hSdxqoN; uid=228118
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: zstd
+Referer: https://www.myanonamouse.net/guides/?gid=28661
+Connection: keep-alive
+Upgrade-Insecure-Requests: 1
+Sec-Fetch-Dest: document
+Sec-Fetch-Mode: navigate
+Sec-Fetch-Site: same-origin
+Priority: u=0, i
+TE: trailers
+
+###
+
+GET https://www.myanonamouse.net/tor/js/loadSearchJSONbasic.php
+Cookie: mam_id=JLRVxt7okP92MQEo2RWmvQlVt2sfjGv_uVwPmeG60PFYqobab3Y7Qw_1Vtpev020uNgAUTetfQl2hbVlcsARptSOpi5l2DzEEeNH_bkRJ5j3iUrja14IS6NwXFAVrz3SGfO5scgopjbHZeSZWAGfMdIi8wX0GA5Rq2YhDOPro9zrzeLAjEXVEoPNFo1DpzMug-tDVzySqso4A6INHFX2Fdzg8bZ0LFg2zg2uAgd1NquvFtg-ldxhGYiqpavwLkfePXTaGLuL4MIV1t2iQYigndlBqdHH3hSdxqoN
+
+{
+	"tor": {
+		"text": "collection cookbooks food test kitchen",
+		"srchIn": [
+			"title",
+			"author",
+			"narrator"
+		],
+		"searchType": "all",
+		"searchIn": "torrents",
+		"cat": ["0"],
+		"browseFlagsHideVsShow": "0",
+		"startDate": "",
+		"endDate": "",
+		"hash": "",
+		"sortType": "default",
+		"startNumber": "0"
+	},
+	"thumbnail": "true"
+}
+
+# tor[cat][]=0&tor[sortType]=default&tor[browseStart]=true&tor[startNumber]=0&bannerLink&bookmarks&dlLink&description&tor[text]=mp3 m4a
